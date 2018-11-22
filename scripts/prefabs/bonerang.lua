@@ -1,0 +1,121 @@
+local assets=
+{
+	Asset("ANIM", "anim/bonerang.zip"),
+	Asset("ANIM", "anim/swap_bonerang.zip"),
+	
+	Asset( "ATLAS", "images/inventoryimages/bonerang.xml" ),
+	Asset( "IMAGE", "images/inventoryimages/bonerang.tex" ),	
+}
+
+    
+local prefabs =
+{
+}
+
+local function OnFinished(inst)
+    inst:Remove()
+end
+
+local function OnEquip(inst, owner) 
+    owner.AnimState:OverrideSymbol("swap_object", "swap_bonerang", "swap_boomerang")
+    owner.AnimState:Show("ARM_carry") 
+    owner.AnimState:Hide("ARM_normal") 
+end
+
+local function OnDropped(inst)
+    inst.AnimState:PlayAnimation("idle")
+end
+
+local function OnUnequip(inst, owner) 
+    owner.AnimState:Hide("ARM_carry") 
+    owner.AnimState:Show("ARM_normal") 
+end
+
+local function OnThrown(inst, owner, target)
+    if target ~= owner then
+        owner.SoundEmitter:PlaySound("dontstarve/wilson/boomerang_throw")
+    end
+    inst.AnimState:PlayAnimation("spin_loop", true)
+end
+
+local function OnCaught(inst, catcher)
+    if catcher then
+        if catcher.components.inventory then
+            if inst.components.equippable and not catcher.components.inventory:GetEquippedItem(inst.components.equippable.equipslot) then
+				catcher.components.inventory:Equip(inst)
+			else
+                catcher.components.inventory:GiveItem(inst)
+            end
+            catcher:PushEvent("catch")
+        end
+    end
+end
+
+local function ReturnToOwner(inst, owner)
+    if owner then
+        owner.SoundEmitter:PlaySound("dontstarve/wilson/boomerang_return")
+        inst.components.projectile:Throw(owner, owner)
+    end
+end
+
+local function OnHit(inst, owner, target)
+    if owner == target then
+        OnDropped(inst)
+    else    
+        ReturnToOwner(inst, owner)
+    end
+    local impactfx = SpawnPrefab("impact")
+    if impactfx then
+	    local follower = impactfx.entity:AddFollower()
+	    follower:FollowSymbol(target.GUID, target.components.combat.hiteffectsymbol, 0, 0, 0 )
+        impactfx:FacePoint(Vector3(inst.Transform:GetWorldPosition()))
+    end
+end
+
+
+local function fn(Sim)
+	local inst = CreateEntity()
+	local trans = inst .entity:AddTransform()
+	local anim = inst.entity:AddAnimState()
+    MakeInventoryPhysics(inst)
+    RemovePhysicsColliders(inst)
+    
+    anim:SetBank("boomerang")
+    anim:SetBuild("bonerang")
+    anim:PlayAnimation("idle")
+    anim:SetRayTestOnBB(true);
+
+    
+	inst:AddTag("irreplaceable")
+    inst:AddTag("projectile")
+    inst:AddTag("thrown")
+    
+    inst:AddComponent("weapon")
+    inst.components.weapon:SetDamage(10)
+    inst.components.weapon:SetRange(10, 10)
+    -------
+
+    inst:AddComponent("inspectable")
+    
+    inst:AddComponent("projectile")
+    inst.components.projectile:SetSpeed(15)
+    inst.components.projectile:SetCanCatch(true)
+    inst.components.projectile:SetOnThrownFn(OnThrown)
+    inst.components.projectile:SetOnHitFn(OnHit)
+    inst.components.projectile:SetOnMissFn(ReturnToOwner)
+    inst.components.projectile:SetOnCaughtFn(OnCaught)
+    
+    inst:AddComponent("inventoryitem")
+    inst.components.inventoryitem:SetOnDroppedFn(OnDropped)
+	inst.components.inventoryitem.atlasname = "images/inventoryimages/bonerang.xml"
+    
+    inst:AddComponent("equippable")
+    inst.components.equippable:SetOnEquip(OnEquip)
+    inst.components.equippable:SetOnUnequip(OnUnequip)
+	
+	inst:DoTaskInTime(0, function() if not GetPlayer() or GetPlayer().prefab ~= "warmond" then inst:Remove() end end)
+    
+    return inst
+end
+
+return Prefab( "common/inventory/bonerang", fn, assets) 
